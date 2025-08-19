@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Github, Mail, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AuthModalProps {
   type: "login" | "signup" | null;
@@ -38,8 +39,26 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
         return;
       }
 
-      // Simulate authentication
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      let result;
+      
+      if (type === "signup") {
+        result = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
+        });
+      } else {
+        result = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+      }
+
+      if (result.error) {
+        throw result.error;
+      }
 
       toast({
         title: "Success!",
@@ -47,11 +66,11 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
       });
 
       onClose();
-      navigate("/editor");
-    } catch (error) {
+      resetForm();
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Something went wrong. Please try again.",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
