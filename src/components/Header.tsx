@@ -24,7 +24,7 @@ export const Header = ({ onNavigate }: HeaderProps) => {
     <>
       <header className="fixed top-0 w-full bg-background/80 backdrop-blur-md border-b border-border z-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-16 relative">
             {/* Logo */}
             <div className="flex items-center space-x-2">
               <img
@@ -35,7 +35,7 @@ export const Header = ({ onNavigate }: HeaderProps) => {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-8">
+            <nav className="hidden md:flex items-center space-x-8 absolute left-1/2 transform -translate-x-1/2">
               {navigation.map((item) => (
                 <a
                   key={item.name}
@@ -67,18 +67,6 @@ export const Header = ({ onNavigate }: HeaderProps) => {
                 className="shadow-glow"
               >
                 Sign Up
-              </Button>
-            </div>
-
-            {/* Mobile theme toggle and menu button */}
-            <div className="md:hidden flex items-center space-x-2">
-              <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              >
-                {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
             </div>
           </div>
