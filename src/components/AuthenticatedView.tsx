@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { Tables } from "@/integrations/supabase/types";
 import { ProjectCard } from "./ProjectCard";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ThemeToggle } from "./ThemeToggle";
@@ -14,7 +15,8 @@ import {
   Settings, 
   LogOut, 
   User as UserIcon,
-  Filter
+  Filter,
+  Mail
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -24,15 +26,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserInvitationsModal } from "./UserInvitationsModal";
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-}
+type Project = Tables<'projects'>;
 
 export const AuthenticatedView = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -45,6 +41,8 @@ export const AuthenticatedView = () => {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [showInvitations, setShowInvitations] = useState(false);
+  const [pendingInvitationsCount, setPendingInvitationsCount] = useState(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -67,6 +65,7 @@ export const AuthenticatedView = () => {
   useEffect(() => {
     if (user) {
       loadProjects();
+      loadPendingInvitationsCount();
     }
   }, [user]);
 
@@ -76,9 +75,11 @@ export const AuthenticatedView = () => {
 
   const loadProjects = async () => {
     try {
+      // Get projects where user is owner OR a member
       const { data, error } = await supabase
         .from("projects")
         .select("*")
+        .or(`user_id.eq.${user?.id},id.in.(${await getUserProjectIds()})`)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -103,6 +104,36 @@ export const AuthenticatedView = () => {
     }
   };
 
+  const getUserProjectIds = async (): Promise<string> => {
+    if (!user?.id) return '';
+    
+    const { data } = await supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("user_id", user.id);
+      
+    return data?.map(p => p.project_id).join(',') || '';
+  };
+
+  const loadPendingInvitationsCount = async () => {
+    if (!user?.email) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from("project_invitations")
+        .select("*", { count: 'exact', head: true })
+        .eq("email", user.email)
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString());
+
+      if (error) throw error;
+
+      setPendingInvitationsCount(count || 0);
+    } catch (error) {
+      console.error("Error loading invitations count:", error);
+    }
+  };
+
   const filterProjects = () => {
     let filtered = projects;
 
@@ -111,14 +142,14 @@ export const AuthenticatedView = () => {
       filtered = filtered.filter(project =>
         project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         project.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+        (project.tags && project.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
       );
     }
 
     // Filter by selected tags
     if (selectedTags.length > 0) {
       filtered = filtered.filter(project =>
-        selectedTags.every(tag => project.tags.includes(tag))
+        project.tags && selectedTags.every(tag => project.tags!.includes(tag))
       );
     }
 
@@ -137,7 +168,7 @@ export const AuthenticatedView = () => {
     
     // Update tags list
     const tags = new Set(allTags);
-    project.tags.forEach(tag => tags.add(tag));
+    project.tags?.forEach(tag => tags.add(tag));
     setAllTags(Array.from(tags));
   };
 
@@ -165,6 +196,33 @@ export const AuthenticatedView = () => {
       toast({
         title: "Error",
         description: "Failed to delete project. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleQuitProject = async (id: string) => {
+    try {
+      if (!user?.id) return;
+
+      const { error } = await supabase
+        .from("project_members")
+        .delete()
+        .eq("project_id", id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setProjects(projects.filter(p => p.id !== id));
+      toast({
+        title: "Left project",
+        description: "You have successfully left the project.",
+      });
+    } catch (error) {
+      console.error("Error quitting project:", error);
+      toast({
+        title: "Error",
+        description: "Failed to leave project. Please try again.",
         variant: "destructive",
       });
     }
@@ -275,6 +333,24 @@ export const AuthenticatedView = () => {
                 </Button>
               )}
 
+              {/* Invitations Button */}
+              <Button
+                variant="outline"
+                onClick={() => setShowInvitations(true)}
+                className="relative"
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Invitations
+                {pendingInvitationsCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                  >
+                    {pendingInvitationsCount}
+                  </Badge>
+                )}
+              </Button>
+
               {/* Create Project Button */}
               <Button onClick={() => setShowCreateModal(true)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -342,6 +418,7 @@ export const AuthenticatedView = () => {
                 project={project}
                 onEdit={handleEditProject}
                 onDelete={handleDeleteProject}
+                onQuit={handleQuitProject}
               />
             ))}
           </div>
@@ -357,6 +434,16 @@ export const AuthenticatedView = () => {
         }}
         onProjectCreated={handleProjectCreated}
         editingProject={editingProject}
+      />
+
+      {/* User Invitations Modal */}
+      <UserInvitationsModal
+        isOpen={showInvitations}
+        onClose={() => setShowInvitations(false)}
+        onInvitationUpdate={() => {
+          loadProjects();
+          loadPendingInvitationsCount();
+        }}
       />
     </div>
   );

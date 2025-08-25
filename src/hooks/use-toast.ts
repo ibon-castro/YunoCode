@@ -155,6 +155,7 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
+      duration: props.duration || 4000, // Default 4 seconds
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
