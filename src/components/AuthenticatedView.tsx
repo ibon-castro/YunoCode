@@ -32,6 +32,7 @@ type Project = Tables<'projects'>;
 
 export const AuthenticatedView = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<{username: string; email: string} | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,13 +50,31 @@ export const AuthenticatedView = () => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, email')
+          .eq('user_id', user.id)
+          .single();
+        setUserProfile(profile);
+      }
     };
 
     getUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         setUser(session?.user ?? null);
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username, email')
+            .eq('user_id', session.user.id)
+            .single();
+          setUserProfile(profile);
+        } else {
+          setUserProfile(null);
+        }
       }
     );
 
@@ -271,7 +290,7 @@ export const AuthenticatedView = () => {
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback>
-                      {user.email?.charAt(0).toUpperCase()}
+                      {userProfile?.username?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -279,7 +298,7 @@ export const AuthenticatedView = () => {
               <DropdownMenuContent className="w-56 bg-background border" align="end">
                 <div className="flex items-center justify-start gap-2 p-2">
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{user.email}</p>
+                    <p className="font-medium">{userProfile?.username || user.email}</p>
                   </div>
                 </div>
                 <DropdownMenuSeparator />

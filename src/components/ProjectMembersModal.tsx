@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { sendInvitationEmail } from "@/lib/emailService";
 import { 
   Users, 
   Mail, 
@@ -214,44 +215,79 @@ export const ProjectMembersModal = ({
   const handleInvite = async () => {
     if (!inviteEmail.trim()) {
       toast({
-        title: "Email required",
-        description: "Please enter an email address to invite.",
+        title: "Input required",
+        description: "Please enter an email address or username to invite.",
         variant: "destructive",
       });
       return;
     }
 
+    const input = inviteEmail.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(inviteEmail)) {
+    const isEmail = emailRegex.test(input);
+    
+    // Get current user to prevent self-invitation
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
       toast({
-        title: "Invalid email",
-        description: "Please enter a valid email address.",
+        title: "Authentication error",
+        description: "You must be logged in to send invitations.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsInviting(true);
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+    let targetEmail = '';
+    
+    if (isEmail) {
+      targetEmail = input.toLowerCase();
+      // Check if user is trying to invite themselves
+      if (targetEmail === user.email) {
         toast({
-          title: "Authentication error",
-          description: "You must be logged in to send invitations.",
+          title: "Invalid invitation",
+          description: "You cannot invite yourself to the project.",
           variant: "destructive",
         });
         return;
       }
+    } else {
+      // It's a username, look up the email
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email, user_id')
+        .eq('username', input)
+        .maybeSingle();
+        
+      if (profileError || !profile) {
+        toast({
+          title: "User not found",
+          description: "No user found with that username.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Check if user is trying to invite themselves
+      if (profile.user_id === user.id) {
+        toast({
+          title: "Invalid invitation",
+          description: "You cannot invite yourself to the project.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      targetEmail = profile.email;
+    }
 
-      // Use current user's email as the inviter name since we don't have profiles table
-
+    setIsInviting(true);
+    try {
       // Insert invitation first to get the token
       const { data: invitationData, error } = await supabase
         .from("project_invitations")
         .insert({
           project_id: projectId,
-          email: inviteEmail.toLowerCase().trim(),
+          email: targetEmail,
           role: 'member',
           invited_by: user.id,
           inviter_email: user.email,
@@ -272,35 +308,41 @@ export const ProjectMembersModal = ({
         return;
       }
 
-      // Send invitation email
-      try {
-        const response = await supabase.functions.invoke('send-invitation', {
-          body: {
-            email: inviteEmail.toLowerCase().trim(),
-            projectName: projectName,
-            inviterName: user.email || 'Someone',
-            invitationToken: invitationData.token,
-          }
+      // Send invitation email using EmailJS
+      try {        
+        // Get current user's profile to use username
+        const { data: currentUserProfile } = await supabase
+          .from('profiles')
+          .select('username, email')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const emailResult = await sendInvitationEmail({
+          email: targetEmail,
+          projectName: projectName,
+          inviterName: user.email || 'Someone',
+          inviterUsername: currentUserProfile?.username,
+          invitationToken: invitationData.token,
         });
 
-        if (response.error) {
-          console.error("Error from send-invitation function:", response.error);
+        if (!emailResult.success) {
+          console.error("Error sending invitation email:", emailResult.error);
           toast({
             title: "Email notification failed",
-            description: "Invitation created but email could not be sent. Please verify your Resend domain.",
+            description: "Invitation created but email could not be sent. Please check your EmailJS configuration.",
             variant: "destructive",
           });
         } else {
           toast({
             title: "Invitation sent",
-            description: `Invitation email sent to ${inviteEmail}`,
+            description: `Invitation email sent to ${targetEmail}`,
           });
         }
       } catch (emailError) {
         console.error("Error sending invitation email:", emailError);
         toast({
           title: "Invitation created",
-          description: `Invitation created for ${inviteEmail}, but email notification failed to send.`,
+          description: `Invitation created for ${targetEmail}, but email notification failed to send.`,
           variant: "default",
         });
       }
@@ -411,8 +453,7 @@ export const ProjectMembersModal = ({
               <h3 className="text-lg font-medium">Invite New Member</h3>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Enter email address"
-                  type="email"
+                  placeholder="Enter email address or username"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleInvite()}

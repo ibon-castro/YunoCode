@@ -18,6 +18,8 @@ interface AuthModalProps {
 
 export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProps) => {
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [loginField, setLoginField] = useState(""); // For username or email login
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,6 +27,19 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const validateUsername = (username: string) => {
+    const requirements = {
+      length: username.length >= 3 && username.length <= 20,
+      format: /^[a-zA-Z0-9_-]+$/.test(username),
+      startEnd: /^[a-zA-Z0-9]/.test(username) && /[a-zA-Z0-9]$/.test(username)
+    };
+    
+    return {
+      isValid: Object.values(requirements).every(Boolean),
+      requirements
+    };
+  };
 
   const validatePassword = (password: string) => {
     const requirements = {
@@ -63,28 +78,56 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
   };
 
   const passwordValidation = type === "signup" ? validatePassword(password) : null;
+  const usernameValidation = type === "signup" ? validateUsername(username) : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      if (type === "signup" && password !== confirmPassword) {
-        toast({
-          title: "Error",
-          description: "Passwords do not match",
-          variant: "destructive",
-        });
-        return;
-      }
+      if (type === "signup") {
+        if (password !== confirmPassword) {
+          toast({
+            title: "Error",
+            description: "Passwords do not match",
+            variant: "destructive",
+          });
+          return;
+        }
 
-      if (type === "signup" && passwordValidation && !passwordValidation.isValid) {
-        toast({
-          title: "Error",
-          description: "Password does not meet requirements",
-          variant: "destructive",
-        });
-        return;
+        if (passwordValidation && !passwordValidation.isValid) {
+          toast({
+            title: "Error",
+            description: "Password does not meet requirements",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (usernameValidation && !usernameValidation.isValid) {
+          toast({
+            title: "Error",
+            description: "Username must be 3-20 characters, contain only letters, numbers, hyphens, and underscores, and start/end with a letter or number",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Check if username already exists
+        const { data: existingUser } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('username', username.toLowerCase())
+          .maybeSingle();
+
+        if (existingUser) {
+          toast({
+            title: "Error",
+            description: "Username is already taken",
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
       let result;
@@ -94,14 +137,43 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin
+            emailRedirectTo: window.location.origin,
+            data: {
+              username: username.toLowerCase()
+            }
           }
         });
       } else {
-        result = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
+        // Try to determine if loginField is email or username
+        const isEmail = loginField.includes('@');
+        
+        if (isEmail) {
+          result = await supabase.auth.signInWithPassword({
+            email: loginField,
+            password
+          });
+        } else {
+          // Get email from username
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', loginField.toLowerCase())
+            .maybeSingle();
+
+          if (!profile?.email) {
+            toast({
+              title: "Error",
+              description: "Username not found",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          result = await supabase.auth.signInWithPassword({
+            email: profile.email,
+            password
+          });
+        }
       }
 
       if (result.error) {
@@ -128,6 +200,8 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
 
   const resetForm = () => {
     setEmail("");
+    setUsername("");
+    setLoginField("");
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
@@ -167,25 +241,60 @@ export const AuthModal = ({ type, isOpen, onClose, onSwitchMode }: AuthModalProp
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-background px-2 text-muted-foreground">
-                Or continue with email
+                Or continue with {type === "login" ? "username/email" : "email"}
               </span>
             </div>
           </div>
 
-          {/* Email/Password Form */}
+          {/* Form Fields */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
+            {type === "login" ? (
+              <div className="space-y-2">
+                <Label htmlFor="loginField">Username or Email</Label>
+                <Input
+                  id="loginField"
+                  type="text"
+                  placeholder="Enter your username or email"
+                  value={loginField}
+                  onChange={(e) => setLoginField(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Choose a username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                    required
+                    disabled={isLoading}
+                  />
+                  {usernameValidation && username.length > 0 && !usernameValidation.isValid && (
+                    <p className="text-xs text-destructive">
+                      Username must be 3-20 characters, contain only letters, numbers, hyphens, and underscores
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>

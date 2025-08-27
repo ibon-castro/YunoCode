@@ -153,6 +153,7 @@ export const UserInvitationsModal = ({
       });
 
       loadInvitations();
+      onInvitationUpdate?.();
     } catch (error) {
       console.error("Error declining invitation:", error);
       toast({

@@ -18,26 +18,29 @@ export type Database = {
         Row: {
           created_at: string
           display_name: string | null
-          email: string
+          email: string | null
           id: string
           updated_at: string
           user_id: string
+          username: string | null
         }
         Insert: {
           created_at?: string
           display_name?: string | null
-          email: string
+          email?: string | null
           id?: string
           updated_at?: string
           user_id: string
+          username?: string | null
         }
         Update: {
           created_at?: string
           display_name?: string | null
-          email?: string
+          email?: string | null
           id?: string
           updated_at?: string
           user_id?: string
+          username?: string | null
         }
         Relationships: []
       }
@@ -49,6 +52,7 @@ export type Database = {
           expires_at: string
           id: string
           invited_by: string
+          inviter_email: string | null
           project_id: string
           role: string
           token: string
@@ -61,6 +65,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by: string
+          inviter_email?: string | null
           project_id: string
           role?: string
           token?: string
@@ -73,6 +78,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by?: string
+          inviter_email?: string | null
           project_id?: string
           role?: string
           token?: string
@@ -91,6 +97,7 @@ export type Database = {
       project_members: {
         Row: {
           created_at: string
+          email: string | null
           id: string
           invited_at: string
           invited_by: string | null
@@ -102,6 +109,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          email?: string | null
           id?: string
           invited_at?: string
           invited_by?: string | null
@@ -113,6 +121,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          email?: string | null
           id?: string
           invited_at?: string
           invited_by?: string | null
@@ -174,6 +183,22 @@ export type Database = {
       transfer_project_ownership: {
         Args: { p_new_owner_id: string; p_project_id: string }
         Returns: undefined
+      }
+      user_can_access_project_members: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      user_has_pending_invitation_for_project: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      user_is_invited_by: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
+      user_is_project_member: {
+        Args: { p_project_id: string }
+        Returns: boolean
       }
     }
     Enums: {

@@ -1,4 +1,0 @@
-project_id = "yrmyylutphmiinoccpfs"
-
-[functions.send-invitation]
-verify_jwt = false
