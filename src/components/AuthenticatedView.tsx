@@ -25,14 +25,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserInvitationsModal } from "./UserInvitationsModal";
+import { UserSettingsModal } from "./UserSettingsModal";
 
 type Project = Tables<'projects'>;
+type Profile = Tables<'profiles'>;
 
 export const AuthenticatedView = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<{username: string; email: string} | null>(null);
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,6 +45,7 @@ export const AuthenticatedView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pendingInvitationsCount, setPendingInvitationsCount] = useState(0);
   const { toast } = useToast();
 
@@ -53,7 +56,7 @@ export const AuthenticatedView = () => {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('username, email')
+          .select('*')
           .eq('user_id', user.id)
           .single();
         setUserProfile(profile);
@@ -68,7 +71,7 @@ export const AuthenticatedView = () => {
         if (session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('username, email')
+            .select('*')
             .eq('user_id', session.user.id)
             .single();
           setUserProfile(profile);
@@ -289,8 +292,11 @@ export const AuthenticatedView = () => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-8 w-8">
+                    <AvatarImage src={userProfile?.avatar_url || ""} />
                     <AvatarFallback>
-                      {userProfile?.username?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
+                      {userProfile?.display_name?.charAt(0).toUpperCase() || 
+                       userProfile?.username?.charAt(0).toUpperCase() || 
+                       user.email?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -298,11 +304,14 @@ export const AuthenticatedView = () => {
               <DropdownMenuContent className="w-56 bg-background border" align="end">
                 <div className="flex items-center justify-start gap-2 p-2">
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{userProfile?.username || user.email}</p>
+                    <p className="font-medium">{userProfile?.display_name || userProfile?.username || user.email}</p>
+                    {userProfile?.display_name && userProfile?.username && (
+                      <p className="text-xs text-muted-foreground">@{userProfile.username}</p>
+                    )}
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowSettings(true)}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
@@ -463,6 +472,24 @@ export const AuthenticatedView = () => {
           loadProjects();
           loadPendingInvitationsCount();
         }}
+      />
+
+      {/* User Settings Modal */}
+      <UserSettingsModal
+        isOpen={showSettings}
+        onClose={() => {
+          setShowSettings(false);
+          // Reload profile to update avatar and other changes
+          if (user) {
+            supabase
+              .from('profiles')
+              .select('*')
+              .eq('user_id', user.id)
+              .single()
+              .then(({ data }) => setUserProfile(data));
+          }
+        }}
+        user={user}
       />
     </div>
   );

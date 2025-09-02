@@ -23,6 +23,13 @@ export type Database = {
           updated_at: string
           user_id: string
           username: string | null
+          avatar_url: string | null
+          bio: string | null
+          location: string | null
+          theme_preference: string | null
+          website: string | null
+          language_preference: string | null
+          notification_preferences: Json | null
         }
         Insert: {
           created_at?: string
@@ -32,6 +39,13 @@ export type Database = {
           updated_at?: string
           user_id: string
           username?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          location?: string | null
+          theme_preference?: string | null
+          website?: string | null
+          language_preference?: string | null
+          notification_preferences?: Json | null
         }
         Update: {
           created_at?: string
@@ -41,6 +55,13 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          location?: string | null
+          theme_preference?: string | null
+          website?: string | null
+          language_preference?: string | null
+          notification_preferences?: Json | null
         }
         Relationships: []
       }
