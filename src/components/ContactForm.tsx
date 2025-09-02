@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Mail, User, MessageSquare } from "lucide-react";
+import { sendContactEmail } from "@/lib/emailService";
 
 export const ContactForm = () => {
   const [formData, setFormData] = useState({
@@ -21,8 +22,15 @@ export const ContactForm = () => {
     setIsLoading(true);
 
     try {
-      // Simulate form submission
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const result = await sendContactEmail({
+        name: formData.name,
+        email: formData.email,
+        message: formData.message,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
       
       toast({
         title: "Message Sent!",
@@ -31,6 +39,7 @@ export const ContactForm = () => {
 
       setFormData({ name: "", email: "", message: "" });
     } catch (error) {
+      console.error('Failed to send email:', error);
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
